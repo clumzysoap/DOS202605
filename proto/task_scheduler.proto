@@ -1,0 +1,174 @@
+syntax = "proto3";
+
+package task_scheduler;
+
+// Empty 是一个通用空消息。
+// gRPC 方法如果不需要入参或返回值，也推荐显式使用 Empty，而不是另写多个空结构。
+message Empty {}
+
+// TaskType 表示系统支持的任务类型。
+// 课程演示系统不执行任意 Python 代码，避免安全风险；而是提供几个可控的任务类型。
+enum TaskType {
+  TASK_TYPE_UNSPECIFIED = 0;
+  TASK_TYPE_SLEEP = 1;
+  TASK_TYPE_FIBONACCI = 2;
+  TASK_TYPE_WORD_COUNT = 3;
+}
+
+// TaskStatus 表示任务生命周期中的状态。
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_QUEUED = 1;
+  TASK_STATUS_RUNNING = 2;
+  TASK_STATUS_SUCCEEDED = 3;
+  TASK_STATUS_FAILED = 4;
+  TASK_STATUS_TIMED_OUT = 5;
+}
+
+// SubmitTaskRequest 是客户端提交任务时发送的请求。
+message SubmitTaskRequest {
+  // name 是用户可读任务名，用于日志、列表和演示输出。
+  string name = 1;
+
+  // task_type 决定 Worker 如何解释 payload。
+  TaskType task_type = 2;
+
+  // payload 是任务参数。
+  // 为了让接口保持简单，本课程项目用字符串承载参数：
+  // - sleep：填写秒数，例如 "3"。
+  // - fibonacci：填写 n，例如 "35"。
+  // - word_count：填写一段文本。
+  string payload = 3;
+
+  // priority 预留给扩展实验使用，当前调度器按照 FIFO + 负载策略处理。
+  int32 priority = 4;
+}
+
+// SubmitTaskResponse 是客户端提交任务后的响应。
+message SubmitTaskResponse {
+  string task_id = 1;
+  string message = 2;
+}
+
+// TaskInfo 是任务详情。
+// 该结构会被客户端查询、调度器列表、Worker 拉取任务等多个接口复用。
+message TaskInfo {
+  string task_id = 1;
+  string name = 2;
+  TaskType task_type = 3;
+  string payload = 4;
+  int32 priority = 5;
+  TaskStatus status = 6;
+  string assigned_worker_id = 7;
+  string result = 8;
+  string error = 9;
+  int64 created_at_unix_ms = 10;
+  int64 started_at_unix_ms = 11;
+  int64 finished_at_unix_ms = 12;
+}
+
+// QueryTaskRequest 用于查询单个任务。
+message QueryTaskRequest {
+  string task_id = 1;
+}
+
+// ListTasksRequest 用于分页列出任务。
+message ListTasksRequest {
+  int32 limit = 1;
+}
+
+// ListTasksResponse 返回任务列表。
+message ListTasksResponse {
+  repeated TaskInfo tasks = 1;
+}
+
+// WorkerHeartbeatRequest 是 Worker 上报状态的请求。
+message WorkerHeartbeatRequest {
+  string worker_id = 1;
+  string address = 2;
+  int32 max_concurrent_tasks = 3;
+  int32 running_tasks = 4;
+  double cpu_percent = 5;
+  double memory_percent = 6;
+  int64 timestamp_unix_ms = 7;
+}
+
+// WorkerHeartbeatResponse 是调度器收到 Worker 心跳后的响应。
+message WorkerHeartbeatResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+// PullTaskRequest 是 Worker 向调度器拉取任务的请求。
+message PullTaskRequest {
+  string worker_id = 1;
+}
+
+// PullTaskResponse 是调度器给 Worker 分配任务的响应。
+message PullTaskResponse {
+  bool has_task = 1;
+  TaskInfo task = 2;
+  string message = 3;
+}
+
+// ReportTaskResultRequest 是 Worker 提交执行结果的请求。
+message ReportTaskResultRequest {
+  string worker_id = 1;
+  string task_id = 2;
+  bool success = 3;
+  string result = 4;
+  string error = 5;
+  int64 finished_at_unix_ms = 6;
+}
+
+// ReportTaskResultResponse 是调度器确认结果后的响应。
+message ReportTaskResultResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+// WorkerInfo 是调度器保存的 Worker 运行状态。
+message WorkerInfo {
+  string worker_id = 1;
+  string address = 2;
+  int32 max_concurrent_tasks = 3;
+  int32 running_tasks = 4;
+  double cpu_percent = 5;
+  double memory_percent = 6;
+  int64 last_heartbeat_unix_ms = 7;
+  bool alive = 8;
+}
+
+// ListWorkersResponse 返回 Worker 状态列表。
+message ListWorkersResponse {
+  repeated WorkerInfo workers = 1;
+}
+
+// HealthCheckResponse 是简单健康检查结果。
+message HealthCheckResponse {
+  bool ok = 1;
+  string service = 2;
+  string message = 3;
+}
+
+// SchedulerService 是系统的中心服务。
+// 客户端和 Worker 都连接到调度器：
+// - 客户端提交和查询任务。
+// - Worker 心跳上报、拉取任务、提交结果。
+service SchedulerService {
+  rpc SubmitTask(SubmitTaskRequest) returns (SubmitTaskResponse);
+  rpc QueryTask(QueryTaskRequest) returns (TaskInfo);
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc WorkerHeartbeat(WorkerHeartbeatRequest) returns (WorkerHeartbeatResponse);
+  rpc PullTask(PullTaskRequest) returns (PullTaskResponse);
+  rpc ReportTaskResult(ReportTaskResultRequest) returns (ReportTaskResultResponse);
+  rpc ListWorkers(Empty) returns (ListWorkersResponse);
+  rpc HealthCheck(Empty) returns (HealthCheckResponse);
+}
+
+// WorkerService 是 Worker 自己暴露的服务。
+// 当前系统的核心调度流是 Worker 主动连接 Scheduler；保留 WorkerService 是为了展示
+// 分布式系统中节点也可以对外提供健康检查、状态查询等 RPC 接口。
+service WorkerService {
+  rpc HealthCheck(Empty) returns (HealthCheckResponse);
+}

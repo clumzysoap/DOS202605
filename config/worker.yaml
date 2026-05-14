@@ -1,0 +1,23 @@
+# Worker 配置文件。
+# 每个 Worker 节点可以复制这个文件后修改 worker_id 和 listen_port，以模拟多台机器。
+
+# Worker 默认连接的调度器地址。
+scheduler_address: "127.0.0.1:50051"
+
+# Worker 自己对外暴露的 gRPC 地址。
+# 当前系统主要使用 Worker 主动拉取任务的模式，所以这个地址用于健康检查和演示。
+listen_host: "0.0.0.0"
+listen_port: 50061
+
+# Worker 向调度器发送心跳的间隔，单位秒。
+heartbeat_interval_seconds: 3
+
+# Worker 最多同时执行多少个任务。
+max_concurrent_tasks: 2
+
+# Worker 空闲时轮询调度器任务队列的间隔，单位秒。
+poll_interval_seconds: 1
+
+# 模拟任务执行时允许的最大 sleep 秒数。
+# 这个值用于避免用户误提交特别长的 sleep 任务，导致课堂演示等待太久。
+max_sleep_seconds: 10

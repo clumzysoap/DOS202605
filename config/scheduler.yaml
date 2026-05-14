@@ -1,0 +1,28 @@
+# 调度器配置文件。
+# 这个文件只保存“调度器自己需要知道”的参数，避免把 Worker 或客户端的本地参数混在一起。
+
+# gRPC 服务绑定的主机名。
+# 0.0.0.0 表示监听所有网卡，便于局域网内其他机器连接。
+host: "0.0.0.0"
+
+# gRPC 服务监听端口。
+port: 50051
+
+# 调度策略。
+# 可选值：
+# - round_robin：轮询，每次选择下一个可用 Worker。
+# - least_loaded：最少任务数优先。
+# - weighted_score：综合 CPU、内存、待执行任务数计算得分，得分最低者优先。
+strategy: "weighted_score"
+
+# 调度器认为 Worker 失联的阈值，单位秒。
+# 如果超过这个时间没有收到 Worker 心跳，则调度器不会继续给该 Worker 分配新任务。
+worker_ttl_seconds: 15
+
+# 任务执行超时时间，单位秒。
+# Worker 拉取任务后，如果长时间没有提交结果，调度器会把任务重新放回队列。
+task_timeout_seconds: 60
+
+# 调度器线程池数量。
+# gRPC Python 服务端使用线程池处理多个客户端请求。
+max_workers: 16
