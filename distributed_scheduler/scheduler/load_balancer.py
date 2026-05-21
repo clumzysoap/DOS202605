@@ -6,9 +6,11 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 
-from distributed_scheduler.common.models import WorkerRecord
+from distributed_scheduler.common.models import WorkerRecord, TaskRecord
+from distributed_scheduler.generated import task_scheduler_pb2
 
 
 @dataclass
@@ -22,6 +24,17 @@ class LoadBalancer:
 
     strategy: str
     _round_robin_index: int = 0
+
+    def choose_workers(self,workers : list[WorkerRecord] , task : TaskRecord):
+
+        if not workers:
+            return None
+
+        if self.strategy == "static_choose_by_id":
+            ordered_workers = sorted(workers, key=lambda worker: worker.worker_id)
+            return self._static_choose_by_id(ordered_workers,task)
+
+        else : return self.choose(workers)
 
     def choose(self, workers: list[WorkerRecord]) -> WorkerRecord | None:
         """从候选 Worker 中选择一个。
@@ -39,17 +52,37 @@ class LoadBalancer:
         # 按 worker_id 排序可以让相同状态下的选择结果稳定，方便课堂演示和测试。
         ordered_workers = sorted(workers, key=lambda worker: worker.worker_id)
 
-        if self.strategy == "round_robin":
+        if self.strategy == "random_choose":
+            return self._choose_worker_random(ordered_workers)
+
+        elif self.strategy == "round_robin":
             return self._choose_round_robin(ordered_workers)
 
-        if self.strategy == "least_loaded":
+        elif self.strategy == "least_loaded":
             return self._choose_least_loaded(ordered_workers)
 
-        if self.strategy == "weighted_score":
+        elif self.strategy == "weighted_score":
             return self._choose_weighted_score(ordered_workers)
 
         # 如果配置文件写错策略名，不让系统崩溃，而是退回综合加权策略。
         return self._choose_weighted_score(ordered_workers)
+
+    def _static_choose_by_id(self,workers : list[WorkerRecord],task : TaskRecord) -> WorkerRecord :
+        """固定任务分配 : """
+
+        workers_size : int = len(workers)
+        if task.task_type == task_scheduler_pb2.TASK_TYPE_SLEEP :
+            return workers[min(1,workers_size - 1)]
+        elif task.task_type == task_scheduler_pb2.TASK_TYPE_FIBONACCI:
+            return workers[min(2,workers_size - 1)]
+        elif task.task_type == task_scheduler_pb2.TASK_TYPE_WORD_COUNT:
+            return workers[min(3,workers_size - 1)]
+        else : return workers[0]
+
+    def _choose_worker_random(self,workers : list[WorkerRecord]) -> WorkerRecord:
+        choose_index = random.randint(0, 998244353)
+        worker_len = len(workers)
+        return workers[choose_index % worker_len]
 
     def _choose_round_robin(self, workers: list[WorkerRecord]) -> WorkerRecord:
         """轮询策略：每次选择下一个 Worker。

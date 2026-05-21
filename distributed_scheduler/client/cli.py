@@ -105,7 +105,7 @@ def _submit_task(stub: task_scheduler_pb2_grpc.SchedulerServiceStub, args: argpa
         name=args.name,
         task_type=task_type_from_cli(args.type),
         payload=args.payload,
-        priority=args.priority,
+        priority=args.  priority,
     )
     response = stub.SubmitTask(request, timeout=5)
     print(f"任务已提交：task_id={response.task_id}")

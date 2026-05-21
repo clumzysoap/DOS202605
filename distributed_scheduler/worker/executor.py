@@ -92,6 +92,9 @@ def _execute_fibonacci(payload: str) -> ExecutionResult:
 
     return ExecutionResult(success=True, result=f"fib({n}) = {previous}")
 
+def cal_fibonacci_work(number : int) -> int :
+    if number == 2 or number == 1 : return number
+    else : return cal_fibonacci_work(number - 1) + cal_fibonacci_work(number - 2)
 
 def _execute_word_count(payload: str) -> ExecutionResult:
     """执行单词统计任务。

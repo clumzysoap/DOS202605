@@ -135,12 +135,15 @@ class TaskStore:
             if not self._is_worker_alive(worker) or not worker.has_capacity():
                 return None
 
+            next_task = self._get_next_queued_task_locked()
+            if next_task is None : return None
+
             candidates = [
                 item
                 for item in self._workers.values()
                 if self._is_worker_alive(item) and item.has_capacity()
             ]
-            chosen_worker = self._load_balancer.choose(candidates)
+            chosen_worker = self._load_balancer.choose_workers(candidates,next_task)
             if chosen_worker is None or chosen_worker.worker_id != worker_id:
                 return None
 
@@ -254,6 +257,17 @@ class TaskStore:
                 continue
             if task.status == InternalTaskStatus.QUEUED:
                 return task
+        return None
+
+    def _get_next_queued_task_locked(self) -> TaskRecord | None:
+        """遍历队列寻找下一个 QUEUED 状态任务，不对队列做任何修改。"""
+
+        # 直接遍历 deque
+        for task_id in self._queued_task_ids:
+            task = self._tasks.get(task_id)
+            if task is not None and task.status == InternalTaskStatus.QUEUED:
+                return task  # 找到即返回
+
         return None
 
     def _is_worker_alive(self, worker: WorkerRecord) -> bool:

@@ -23,7 +23,7 @@ from distributed_scheduler.common.config_loader import load_worker_config
 from distributed_scheduler.common.logging_utils import configure_logging
 from distributed_scheduler.common.time_utils import now_unix_ms
 from distributed_scheduler.generated import task_scheduler_pb2, task_scheduler_pb2_grpc
-from distributed_scheduler.worker.executor import execute_task
+from distributed_scheduler.worker.executor import execute_task, ExecutionResult
 from distributed_scheduler.worker.service import WorkerService
 
 
@@ -70,6 +70,8 @@ class WorkerNode:
 
         # 执行任务的线程池。max_workers 对应 Worker 自己声明的并发能力。
         self._executor = futures.ThreadPoolExecutor(max_workers=max_concurrent_tasks)
+        # 执行任务的线程池，这里考虑本机并没有相关的并发能力，而是线性执行任务
+        self._executor_list = []
 
     def start(self) -> None:
         """启动 Worker，并阻塞直到收到 Ctrl+C。"""
@@ -163,6 +165,35 @@ class WorkerNode:
 
         future = self._executor.submit(execute_task, task, self.max_sleep_seconds)
         future.add_done_callback(lambda done_future: self._report_task_result(task, done_future))
+
+    def _start_task_in_list(self) -> None:
+        """把调度器分配的任务提交至本地任务列表"""
+        if not len(self._executor_list) == 0 :
+            now_task : task_scheduler_pb2.TaskInfo = self._executor_list.pop(0)
+            result : ExecutionResult = execute_task(now_task,self.max_sleep_seconds)
+            self._report_task_result(now_task,result)
+
+    def _report_task_list_result(self,task : task_scheduler_pb2.TaskInfo,execution_result : ExecutionResult):
+        try:
+            request = task_scheduler_pb2.ReportTaskResultRequest(
+                worker_id=self.worker_id,
+                task_id=task.task_id,
+                success=execution_result.success,
+                result=execution_result.result,
+                error=execution_result.error,
+                finished_at_unix_ms=now_unix_ms(),
+            )
+            response = self._scheduler_stub.ReportTaskResult(request, timeout=5)
+            if response.accepted:
+                logging.info("任务结果已回传 task_id=%s", task.task_id)
+            else:
+                logging.warning("调度器拒绝任务结果 task_id=%s reason=%s", task.task_id, response.message)
+        except grpc.RpcError as exc:
+            logging.warning("回传任务结果失败 task_id=%s error=%s", task.task_id, exc.details() or exc.code())
+        except Exception as exc:  # noqa: BLE001 - 回调中需要保护线程池线程。
+            logging.warning("回传任务结果时出现异常 task_id=%s error=%s", task.task_id, exc)
+        finally:
+            self._decrement_running_tasks()
 
     def _report_task_result(
         self,
