@@ -143,7 +143,7 @@ class TaskStore:
                 for item in self._workers.values()
                 if self._is_worker_alive(item) and item.has_capacity()
             ]
-            chosen_worker = self._load_balancer.choose_workers(candidates,next_task)
+            chosen_worker = self._load_balancer.choose_workers(candidates,next_task,worker_id)
             if chosen_worker is None or chosen_worker.worker_id != worker_id:
                 return None
 

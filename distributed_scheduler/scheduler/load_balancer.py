@@ -25,7 +25,7 @@ class LoadBalancer:
     strategy: str
     _round_robin_index: int = 0
 
-    def choose_workers(self,workers : list[WorkerRecord] , task : TaskRecord):
+    def choose_workers(self,workers : list[WorkerRecord] , task : TaskRecord,worker_id : str ):
 
         if not workers:
             return None
@@ -33,6 +33,10 @@ class LoadBalancer:
         if self.strategy == "static_choose_by_id":
             ordered_workers = sorted(workers, key=lambda worker: worker.worker_id)
             return self._static_choose_by_id(ordered_workers,task)
+
+        elif self.strategy == "round_robin" :
+            ordered_workers = sorted(workers, key=lambda worker: worker.worker_id)
+            return self._choose_round_robin(ordered_workers,worker_id)
 
         else : return self.choose(workers)
 
@@ -54,9 +58,6 @@ class LoadBalancer:
 
         if self.strategy == "random_choose":
             return self._choose_worker_random(ordered_workers)
-
-        elif self.strategy == "round_robin":
-            return self._choose_round_robin(ordered_workers)
 
         elif self.strategy == "least_loaded":
             return self._choose_least_loaded(ordered_workers)
@@ -84,13 +85,15 @@ class LoadBalancer:
         worker_len = len(workers)
         return workers[choose_index % worker_len]
 
-    def _choose_round_robin(self, workers: list[WorkerRecord]) -> WorkerRecord:
+    def _choose_round_robin(self, workers: list[WorkerRecord],worker_id : str) -> WorkerRecord:
         """轮询策略：每次选择下一个 Worker。
 
         轮询不考虑 CPU 和内存，只追求请求数量大致均匀。它适合所有节点性能接近的场景。
         """
 
         index = self._round_robin_index % len(workers)
+        #if index == int(worker_id) - int(workers[0].worker_id ):
+        print(worker_id)
         self._round_robin_index += 1
         return workers[index]
 
